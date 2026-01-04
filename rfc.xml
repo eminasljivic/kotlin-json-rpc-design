@@ -13,33 +13,38 @@
     </author>
     <date day="3" month="January" year="2026"/>
     <abstract>
-      <t>This document describes the design of a Kotlin implementation of JSON-RPC 2.0, including core data models, serialization strategies, transport abstractions, and API considerations.</t>
+      <t>
+        This document describes the design of a Kotlin implementation of JSON-RPC 2.0, including core data models, serialization strategies, and API considerations.
+      </t>
     </abstract>
   </front>
 
   <middle>
-
     <section title="Overview" anchor="overview">
       <t>
         This document describes a Kotlin model and client/server API for JSON-RPC 2.0. The goal is to provide a type-safe, protocol-correct representation of JSON-RPC messages.
       </t>
-      
+
       <t>
-        Transport mechanisms, authentication, batching strategies, and method-specific behavior are intentionally excluded and left to higher-level implementations.
+        Transport mechanisms, authentication, and specific behavior are intentionally excluded and left to higher-level implementations.
       </t>
     </section>
 
     <section title="Conventions" anchor="conventions">
-      <t>The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT" and "MAY" in this document are to be interpreted as described in RFC 2119.</t>
+      <t>
+        The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this document are to be interpreted as described in RFC 2119.
+      </t>
     </section>
 
     <section title="Serialization Strategy" anchor="serialization">
       <t>
-        Implementation SHOULD use the core library kotlinx.serialization, since it is part of the core libraries it is well-tested and reliable.
+        Implementation SHOULD use the core library kotlinx.serialization, as it is part of the core libraries and is well-tested and reliable.
       </t>
+
       <t>
-        It also provides classes like JsonElement or JsonPrimitive which allow the variable structures of JSON objects and still allowing easy serialization/deserialization.
+        It also provides classes such as JsonElement or JsonPrimitive, which allow for the variable structures of JSON objects while still enabling easy serialization/deserialization.
       </t>
+
       <t>
         All examples in this document assume the use of kotlinx.serialization. Alternative serialization frameworks may be used at the implementer's discretion.
       </t>
@@ -52,54 +57,56 @@ sealed interface JsonRpcObject {
     val jsonrpc: String?
 }
         </sourcecode>
+
         <t>
-          Because JSON-RPC 2.0 enforces a strict structure and a closed set of types for RPC calls, a sealed interface was used to restrict subclass declarations to the same module. The interface defines the jsonrpc property, which is mandatory for all JSON-RPC 2.0 objects but set nullable to be able to use it with 1.0. For more information, refer to Section <xref target="compatibility">Backward Compatibility</xref>.
+          Because JSON-RPC 2.0 enforces a strict structure and a closed set of types for RPC calls, a sealed interface was used to restrict subclass declarations to the same module. The interface defines the jsonrpc property, which is mandatory for all JSON-RPC 2.0 objects, but sets it as nullable to allow its use with 1.0. For more information, refer to Section <xref target="compatibility">Backward Compatibility</xref>.
         </t>
+
         <t>
-          To continue this restriction the interface is only implemented using data classes since they are final by default.
+          To maintain this restriction, the interface is implemented using data classes only, as they are final by default.
         </t>
       </section>
 
       <section title="Request &amp; Notification" anchor="request-notification">
            <sourcecode type="kotlin">
 data class JsonRpcRequest (
-    override val jsonrpc: String?,
-    val method: String,
-    val params: JsonElement? = null,
-    val id: JsonPrimitive? = null
+  override val jsonrpc: String?,
+  val method: String,
+  val params: JsonElement? = null,
+  val id: JsonPrimitive? = null
 ) : JsonRpcObject
         </sourcecode>
+
         <t>
-          Since the Section 4 of <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref> defines the id field to be either a string or a number, implementations MUST represent it as a JsonPrimitive. This is possible because the id is not otherwise accessed and is passed through unchanged in the response. Because JsonPrimitive also allows boolean values and special null values, implementations MUST perform validations during the initialization of the object to ensure that only strings or numbers are accepted.
+          Since Section 4 of <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref> defines the id field to be either a string or a number, implementations MUST represent it as a JsonPrimitive. This is possible because the id is not otherwise accessed and is passed through unchanged in the response. Because JsonPrimitive also allows boolean values and special null values, implementations MUST perform validations during the initialization of the object to ensure that only strings or numbers are accepted.
         </t>
+
         <t>
-          As defined in Section 4.1 of the <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref> the difference between a request and a notification is the existence of the id. This is modeled by making the id property nullable, while enforcing the correct usage through higher-level APIs. The option to have a separate class for notifications was considered. See Section <xref target="notification-handling">Notification Handling</xref>.
+          As defined in Section 4.1 of the <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref>, the difference between a request and a notification is the existence of the id. This is modeled by making the id property nullable, while enforcing the correct usage through higher-level APIs. The option to have a separate class for notifications was considered. See Section <xref target="notification-handling">Notification Handling</xref>.
         </t>
+
         <t>
-          Per the specification, parameters MAY be passed either by position or by name, corresponding to a JSON array or object respectively. To support both forms, parameters are represented using JsonElement. Again validations are applied to ensure that only JsonObject and JsonArray values are accepted, as primitive values are not valid parameters. The idea to use stronger types for the parameters was considered, see Section <xref target="request-parameter-type">Request Parameter Type</xref>.
+          According to the specification, parameters MAY be passed either by position or by name, corresponding to a JSON array or object, respectively. To support both forms, parameters are represented using JsonElement. Again, validations are applied to ensure that only JsonObject and JsonArray values are accepted, as primitive values are not valid parameters. The idea of using stronger types for the parameters was considered; see Section <xref target="request-parameter-type">Request Parameter Type</xref>.
         </t>
-   
       </section>
 
       <section title="Response" anchor="response">
-        
         <sourcecode type="kotlin">
 data class JsonRpcResponse (
-    override val jsonrpc: String?,
-    val result: JsonElement? = null,
-    val error: JsonRpcError? = null,
-    val id: JsonPrimitive? = null
+  override val jsonrpc: String?,
+  val result: JsonElement? = null,
+  val error: JsonRpcError? = null,
+  val id: JsonPrimitive? = null
 ) : JsonRpcObject
         </sourcecode>
-        
+
         <t>
           The result property MUST be represented as a JsonElement whose value is server-defined. 
         </t>
 
         <t>
-          As defined in Section 5 of <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref> either the result or error property MUST be exclusively set. This MUST be validated at initialization as well.
+          As defined in Section 5 of <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref>, either the result or error property MUST be exclusively set. This MUST be validated at initialization as well.
         </t>
-        
       </section>
 
       <section title="Error Model" anchor="error-model">
@@ -110,17 +117,19 @@ data class JsonRpcError (
     val data: JsonElement? = null
 )
         </sourcecode>
+
         <t>
           The error code is represented as a Long, since the code MUST be an integer as defined in Section 5.1 of <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref>. Using Long accommodates the full integer range representable by a JSON number, as defined in [RFC8259].
         </t>
+
         <t>
-          JsonElement was used to allow primitive and structural values for the data property and made nullable as defined in Section 5.1 of <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref>.
+          The JsonElement was used to allow both primitive and structured values for the data property and was made nullable, as defined in Section 5.1 of <xref target="JSON-RPC-2.0">JSON-RPC 2.0</xref>.
         </t>
       </section>
 
       <section title="Validations" anchor="validations">
         <t>
-          Structural invariants that apply to individual message instances are validated during object initialization. Context-dependent validations, such as request-response correlation or batch semantics, are enforced at higher protocol layers. This separation allows malformed messages to be represented explicitly and reported using standard JSON-RPC error responses.
+          Structural specifications that apply to RPC objects are validated during object initialization. Context-dependent validations, such as request/response correlation or result/response semantics, are enforced at higher protocol layers.
         </t>
       </section>
     </section>
@@ -129,39 +138,44 @@ data class JsonRpcError (
       <sourcecode type="kotlin">
 interface JsonRpcClient {
   fun &lt;T&gt; request(
-      method: String, 
-      parameters: JsonElement? = null, 
-      id: JsonPrimitive? = null,
-      serializer: KSerializer&lt;T&gt;
+    method: String, 
+    parameters: JsonElement? = null, 
+    id: JsonPrimitive? = null,
+    serializer: KSerializer&lt;T&gt;
   ): T
-  
+
   fun notify(
-      method: String, 
-      parameters: JsonElement? = null
+    method: String, 
+    parameters: JsonElement? = null
   )
 }
       </sourcecode>
+
       <t>
-        The client SHOULD expose two distinct methods: one for JSON-RPC requests and one for JSON-RPC notifications. This separation provides a clear distinction between request and notification semantics and avoids the need for additional runtime checks to differentiate between RPC call types.
+        The client SHOULD expose two distinct methods: one for JSON-RPC requests and one for JSON-RPC notifications. This separation provides a clear distinction between request and notification semantics, thereby avoiding the need for additional runtime checks to differentiate between RPC call types.
       </t>
+
       <t>
         Each method SHOULD expose all possible properties of the respective RPC call type.
       </t>
+
       <t>
-        A notification MUST NOT include the id property. If an id is exposed, it MUST be ignored. This could occur if a JsonRpcRequest object was passed directly instead of passing the properties as parameters separately. This design option was considered as well. See Section <xref target="client-method-parameters">Client Method Parameters</xref>.
+        A notification MUST NOT include the id property. If an id is exposed, it MUST be ignored. This could occur if a JsonRpcRequest object were passed directly instead of passing the properties as separate parameters. This design option was also considered. See Section <xref target="client-method-parameters">Client Method Parameters</xref>.
       </t>
+
       <section title="Request Method" anchor="request-method">
         <t>
           The id parameter SHOULD be nullable, as the id SHOULD NOT be used for direct logic and MAY be generated by the request method. To allow user-defined logic, the id MAY be explicitly provided by the user.
         </t>
+
         <t>
           The request method MAY omit the id parameter and manage request identifiers internally.
         </t>
+
         <t>
-          The method SHOULD return the expected generic type directly and therefore SHOULD accept a KSerializer capable of deserializing the result property. This allows the user to work with the result object directly without additional logic. Since the user does not have access to the error object, the method MUST propagate errors to the caller.
+          The method SHOULD return the expected generic type directly and therefore SHOULD accept a KSerializer capable of deserializing the result property. This allows the user to work directly with the result object without requiring additional logic. Since the user does not have access to the error object, the method MUST propagate errors to the caller.
         </t>
       </section>
-
     </section>
 
     <section title="Server API Design" anchor="server-api">
@@ -186,19 +200,19 @@ interface JsonRpcServer {
 }
       </sourcecode>
       <t>
-        The server SHOULD have the possibility to register RPC methods. The method SHOULD be registered with a handler lambda function, which accepts one parameter. 
+        The server SHOULD have the possibility to register RPC methods. The method SHOULD be registered with a handler lambda function that accepts one parameter. 
       </t>
 
       <t>
-        Since the RPC method can receive multiple parameters the params property from JsonRpcRequest SHOULD be converted into the parameter type. In case of the named parameters it is straight forward and the JsonElement can be deserialized directly into the parameter type. For positional parameters reflection SHOULD be used to map the elements of the JsonArray to the parameter type. Thus the order of the parameter should correlate to the order of the properties of the parameter class. 
+        Since the RPC method can receive multiple parameters, the params property from JsonRpcRequest SHOULD be converted into the parameter type. For the named parameters, it is straightforward to forward, and the JsonElement can be deserialized directly into the parameter type. For positional parameters reflection SHOULD be used to map the elements of the JsonArray to the parameter type. Thus, the order of the parameter should correlate to the order of the properties of the parameter class. 
       </t>
 
       <t>
-        The server SHOULD have two registration functions to differentiate between requests and notifications. Since the notification lambda function SHOULD NOT not return a result. With that no serializer for the result is needed.
+        The server SHOULD have two registration functions to differentiate between requests and notifications. Since the notification lambda function SHOULD NOT return a result. With that, no serializer for the result is needed.
       </t>
 
       <t>
-        The server MUST implement a method which receives the RPC calls and then calls the corresponding method. The method MUST validate the received RPC call before handing it over to the handler.
+        The server MUST implement a method that receives the RPC calls and then calls the corresponding method. The method MUST validate the received RPC call before handing it over to the handler.
       </t>
 
       <t>
@@ -216,7 +230,7 @@ interface JsonRpcServer {
 
     <section title="Batch Requests" anchor="batch-requests">
       <t>
-        To accommodate batch requests the client API MUST be extended by a method which accepts a List&lt;JsonRpcRequest&gt;. To still have abstract methods for adding requests and notifications an BatchRequestBuilder SHOULD be added. 
+        To accommodate batch requests, the client API MUST be extended with a method that accepts a List &lt; JsonRpcRequest&gt;. To still have abstract methods for adding requests and notifications, a BatchRequestBuilder SHOULD be added. 
       </t>
 
       <sourcecode>
@@ -239,11 +253,11 @@ interface BatchRequestBuilder {
 
     <section title="Backward Compatibility" anchor="compatibility">
       <t>
-        In JSON-RPC 1.0 the property jsonrpc is not defined and and therefore not mandatory. To accommodate this the jsonrpc property SHOULD be nullable. This allows the client and server to set it to null.
+        In JSON-RPC 1.0, the property jsonrpc is not defined and therefore not mandatory. To accommodate this, the jsonrpc property SHOULD be nullable. This allows the client and server to set it to null.
       </t>
 
       <t>
-        The JSON-RPC 1.0 also only allows parameters to be passed by position. So the client SHOULD validate the parameter type  upon calling a method to ensure this.
+        The JSON-RPC 1.0 also only allows parameters to be passed by position. Therefore, the client SHOULD validate the parameter type upon calling a method to ensure this.
       </t>
     </section>
 
@@ -257,7 +271,7 @@ interface BatchRequestBuilder {
 
       <section title="Notification Handling" anchor="notification-handling">
         <t>
-          The idea the use an separate data class for notifications was considered.
+          The idea of using a separate data class for notifications was considered.
         </t>
 
         <sourcecode type="kotlin">
@@ -269,30 +283,32 @@ data class JsonRpcNotification (
         </sourcecode>
 
         <t>
-          This would allow stricter type handling in the later design of the API. But this also complicates the case of batch request since they may include request and notifications within one array.
+
+          This would allow stricter type handling in the later design of the API. However, this also complicates the case of batch requests, as they may include both requests and notifications within a single array.
+
         </t>
 
         <t>
-          Ultimately this idea was tossed due to the limited benefits. This results in additional validation that needs to be added later on, but since validation is required anyway, this approach mainly introduces additional complexity.
+          Ultimately, this idea was tossed due to the limited benefits. This results in additional validation that needs to be added later on, but since validation is required anyway, this approach mainly introduces additional complexity.
         </t>
       </section>
 
       <section title="Client Method Parameters" anchor="client-method-parameters">
         <t>
-          An alternative design was considered where client API methods accept a single JsonRpcRequest object rather than individual parameters. This would allow the request and notify methods to share a common signature and give callers more flexibility in how requests are constructed.
+
+          An alternative design was considered where client API methods accept a single JsonRpcRequest object rather than individual parameters. This would allow the request and notify methods to share a common signature, giving callers more flexibility in how requests are constructed.
+
         </t>
 
         <t>
-          However, exposing JsonRpcRequest at the API boundary would require users to work directly with protocol-level details, such as assigning request identifiers and specifying the protocol version. This increases the risk of constructing invalid messages and the need for more validations. 
+          However, exposing JsonRpcRequest at the API boundary would require users to work directly with protocol-level details, such as assigning request identifiers and specifying the protocol version. This increases the risk of constructing invalid messages and necessitates additional validations. 
         </t>
 
         <t>
           To avoid exposing protocol-specific properties such as jsonrpc and id, and to prevent invalid states by construction, the client API instead accepts method names and parameters directly.
         </t>
       </section>
-
     </section>
-
   </middle>
 
   <back>
@@ -308,4 +324,3 @@ data class JsonRpcNotification (
     </references>
   </back>
 </rfc>
-

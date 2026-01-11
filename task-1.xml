@@ -11,10 +11,10 @@
     <title>Kotlin JSON-RPC 2.0 Design</title>
     <author initials="E." surname="Sljivic">
     </author>
-    <date day="3" month="January" year="2026"/>
+    <date day="11" month="January" year="2026"/>
     <abstract>
       <t>
-        This document describes the design of a Kotlin implementation of JSON-RPC 2.0, including core data models, serialization strategies, and API considerations.
+        This document describes the design for the JSON-RPC 2.0 for the kotlinx-rpc.
       </t>
     </abstract>
   </front>
@@ -22,7 +22,7 @@
   <middle>
     <section title="Overview" anchor="overview">
       <t>
-        This document describes a Kotlin model and client/server API for JSON-RPC 2.0. The goal is to provide a type-safe, protocol-correct representation of JSON-RPC messages.
+        This document describes a Kotlin model and client/server API for JSON-RPC 2.0. The goal is to create a light weight design without any code generation needed.
       </t>
 
       <t>
@@ -34,6 +34,12 @@
       <t>
         The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this document are to be interpreted as described in RFC 2119.
       </t>
+    </section>
+
+    <section title="JSON-RPC"> 
+      <section title="2.0">
+        
+      </section>
     </section>
 
     <section title="Serialization Strategy" anchor="serialization">
@@ -181,17 +187,17 @@ interface JsonRpcClient {
     <section title="Server API Design" anchor="server-api">
       <sourcecode type="kotlin">
 interface JsonRpcServer {
-  fun &lt;P, R&gt; register(
+  inline fun &lt;reified R&gt; register(
     method: String,
-    paramsDeserializer: KSerializer&lt;P&gt;,
     resultSerializer: KSerializer&lt;R&gt;,
-    handler: suspend (P) -&gt; R
+    metadata: RpcMetaData,
+    noinline handler: suspend (List&lt;out Any?&gt;) -&gt; R
   )
 
-  fun &lt;P&gt; registerNotification(
+  method fun registerNotification(
     method: String,
-    paramsDeserializer: KSerializer&lt;P&gt;,
-    handler: suspend (P) -&gt; Unit
+    metadata: RpcMetaData,
+    handler: suspend (List&lt;out Any?&gt;) -&gt; Unit
   )
 
   fun receiveRpcCall(
@@ -199,18 +205,45 @@ interface JsonRpcServer {
   ): JsonRpcResponse?
 }
       </sourcecode>
-      <t>
-        The server SHOULD have the possibility to register RPC methods. The method SHOULD be registered with a handler lambda function that accepts one parameter. 
-      </t>
 
-      <t>
-        Since the RPC method can receive multiple parameters, the params property from JsonRpcRequest SHOULD be converted into the parameter type. For the named parameters, it is straightforward to forward, and the JsonElement can be deserialized directly into the parameter type. For positional parameters reflection SHOULD be used to map the elements of the JsonArray to the parameter type. Thus, the order of the parameter should correlate to the order of the properties of the parameter class. 
-      </t>
-
+      <section title="Register Functions">
       <t>
         The server SHOULD have two registration functions to differentiate between requests and notifications. Since the notification lambda function SHOULD NOT return a result. With that, no serializer for the result is needed.
       </t>
 
+      <t>
+        To ensure multiplatform compatibility, a serializer for the result MUST be provided as an explicit parameter. The same requirement applies to method parameters, for which the ParameterMetaData MUST include a corresponding deserializer.
+      </t>
+      </section>
+
+      <section title="Parameters">
+
+      <sourcecode type="kotlin">
+data class ParameterMetaData&lt;T&gt;(
+  val name: String,
+  val serializer: KSerializer&lt;T&gt;,
+  val isOptional: Boolean = false
+)
+
+data class RpcMetaData {
+  parameterNames: List&lt;ParameterMetaData&gt;
+}
+      </sourcecode>
+
+      <t>
+        To support a variable number and variety of parameters, a handler method SHOULD declare a single parameter of type List&lt;out Any?&gt;. Since request parameters are represented as a JsonElement, they MUST first be converted into a List.
+      </t>
+
+      <t>
+        For a JsonArray, this mapping is direct and requires no additional processing. For a JsonObject, the mapping is more complex, as object properties MUST be associated with specific list indices. To enable this association, additional metadata MUST be provided by the handler.
+      </t>
+
+      <t>
+        The RpcMetaData object therefore MUST include a List describing the parameters, which is used to map object properties to their corresponding list indices. This list MUST be validated to only contain non-empty distinct parameter names.
+      </t>
+      </section>
+
+      <section title="Call Handling">
       <t>
         The server MUST implement a method that receives the RPC calls and then calls the corresponding method. The method MUST validate the received RPC call before handing it over to the handler.
       </t>
@@ -226,6 +259,7 @@ interface JsonRpcServer {
       <t>
         When handling a request, a JsonRpcResult object MUST be created and returned. If the call succeeds, this object MUST contain the serialized result using the resultSerializer. If an error occurs, it MUST instead contain a JsonRpcError describing the failure.
       </t>
+      </section>
     </section>
 
     <section title="Batch Requests" anchor="batch-requests">
